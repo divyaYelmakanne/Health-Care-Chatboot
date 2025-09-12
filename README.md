@@ -1,11 +1,5 @@
 # Healthcare Chatbot
 
-## Important Note !!
-Please note that the project is no longer maintained.
-If anyone wants to expand it further, simply clone it to your own local, make changes and push to your own github account.
-
-Thanks all !!!
-
 ## Description
 This is a healthcare chatbot built using machine learning techniques with scikit-learn. The chatbot interacts with users to gather symptoms, asks follow-up questions, and predicts potential diseases based on the input. It provides detailed descriptions of the predicted diseases and suggests precautions to take.
 
@@ -84,4 +78,4 @@ The project uses the following datasets:
 This project is no longer maintained. For any expansions or improvements, please fork the repository and make changes to your own version.
 
 ## License
-[Add license information if available]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
