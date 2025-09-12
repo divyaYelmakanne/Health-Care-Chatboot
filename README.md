@@ -1,7 +1,7 @@
-#🩺 Healthcare Chatbot
+# 🩺 Healthcare Chatbot
 
 
-##📖 Description
+## 📖 Description
 
 This is a healthcare chatbot built using machine learning (scikit-learn).
 The chatbot interacts with users to gather symptoms 🤒, asks follow-up questions ❓, and predicts potential diseases 🧬.
@@ -11,7 +11,7 @@ The chatbot uses a Decision Tree Classifier 🌳 as the primary model, with SVM 
 It incorporates symptom severity scores ⚖️ to assess condition seriousness and recommends consulting a doctor 🏥 if necessary.
 
 
-##✨ Features
+## ✨ Features
 
 💬 Interactive symptom input & follow-up questioning
 🔮 Disease prediction using ML models (Decision Tree + SVM)
@@ -22,7 +22,7 @@ It incorporates symptom severity scores ⚖️ to assess condition seriousness a
 🔎 Pattern matching for symptom input (handles variations)
 
 
-##⚙️ Installation
+## ⚙️ Installation
 
 1. 📥 Clone the repository:
 ```
@@ -35,7 +35,7 @@ pip install -r requirements.txt
 ```
 
 
-##🚀 Usage
+## 🚀 Usage
 
 1. ▶️ Run the chatbot:
 ```
@@ -51,7 +51,7 @@ python chat_bot.py
 🔊 The chatbot will speak out results using text-to-speech.
 
 
-##📊 Dataset
+## 📊 Dataset
 
 This project uses the following datasets:
 
@@ -63,7 +63,7 @@ This project uses the following datasets:
 📂 MasterData/Symptom_severity.csv → Symptom severity scores
 
 
-##🛠️ How It Works
+## 🛠️ How It Works
 
 1. Model Training
 🌳 Decision Tree trained on symptoms → diseases
@@ -84,17 +84,17 @@ This project uses the following datasets:
 🏥 Recommendation to see doctor if severity is high
 
 
-##📦 Dependencies
+## 📦 Dependencies
 🧮 scikit-learn → ML models
 🐼 pandas → Data handling
 🔊 pyttsx3 → Text-to-speech
 
 
-##🤝 Contributing
+## 🤝 Contributing
 
 ⚠️ This project is no longer maintained.
 If you’d like to expand or improve it → fork the repo and make your changes.
 
-##📜 License
+## 📜 License
 
 📄 Licensed under the MIT License – see LICENSE file for details.
