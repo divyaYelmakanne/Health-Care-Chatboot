@@ -1,131 +1,112 @@
+# chatbot.py (Streamlit Version)
 import streamlit as st
 import pandas as pd
-import numpy as np
-from sklearn import preprocessing
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
-import csv
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
 
-# --- Data Loading and Model Training ---
+# -------------------------
+# Streamlit UI Setup
+# -------------------------
+# This MUST be the first Streamlit command.
+st.set_page_config(page_title="Career Guidance Chatbot", layout="centered")
+
+st.title("💼 Career Guidance Chatbot")
+
+# -------------------------
+# Load & Preprocess Dataset
+# -------------------------
 @st.cache_data
 def load_data():
-    """Loads and preprocesses data for the model."""
-    try:
-        training = pd.read_csv('Data/Training.csv')
-        testing = pd.read_csv('Data/Testing.csv')
-    except FileNotFoundError:
-        st.error("Data files not found. Please check that 'Data/Training.csv' and 'Data/Testing.csv' exist.")
-        st.stop()
-        
-    cols = training.columns[:-1]
-    x = training[cols]
-    y = training['prognosis']
-    
-    le = preprocessing.LabelEncoder()
-    le.fit(y)
-    y = le.transform(y)
-    
-    x_train, _, y_train, _ = train_test_split(x, y, test_size=0.33, random_state=42)
-    
-    clf = DecisionTreeClassifier()
-    clf.fit(x_train, y_train)
-    
-    return clf, le, cols, y, training
+    df = pd.read_csv("CareerMap- Mapping Tech Roles With Personality & Skills.csv")
 
-clf, le, cols, y_encoded, training_df = load_data()
+    # Encode target (career roles)
+    le = LabelEncoder()
+    df["Role"] = le.fit_transform(df["Role"])
 
-# --- Utility Functions ---
-@st.cache_data
-def get_master_data(file_path):
-    """Loads a master data CSV file into a dictionary."""
-    data_dict = {}
-    try:
-        with open(file_path) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=',')
-            for row in csv_reader:
-                if row:
-                    data_dict[row[0]] = row[1:] if len(row) > 1 else row[0]
-    except FileNotFoundError:
-        st.error(f"Master data file not found: {file_path}")
-        st.stop()
-    return data_dict
+    # Encode non-numeric features (if any)
+    for col in df.columns:
+        if df[col].dtype == "object" and col != "Role":
+            df[col] = LabelEncoder().fit_transform(df[col])
 
-severityDictionary = get_master_data('MasterData/symptom_severity.csv')
-description_list = get_master_data('MasterData/symptom_Description.csv')
-precautionDictionary = get_master_data('MasterData/symptom_precaution.csv')
+    return df, le
 
-def get_symptom_info(symptoms_list):
-    """
-    Calculates a 'condition score' based on symptoms and days.
-    (Simplified for Streamlit UI)
-    """
-    try:
-        sum_severity = sum(int(severityDictionary.get(item, ['0'])[0]) for item in symptoms_list)
-        return sum_severity
-    except (ValueError, IndexError):
-        return 0
+@st.cache_resource
+def train_model(df):
+    X = df.drop("Role", axis=1)
+    y = df["Role"]
 
-# --- Streamlit UI and App Logic ---
-st.header("👨‍⚕️ HealthCare ChatBot")
-st.markdown("Please select your symptoms to get a likely diagnosis and precautions.")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Get all unique symptoms from the training data
-all_symptoms = cols.to_list()
+    model = RandomForestClassifier()
+    model.fit(X_train, y_train)
+    return model, list(X.columns)
 
-# --- Main app flow ---
-# Use a multiselect box for user to choose symptoms
-selected_symptoms = st.multiselect(
-    "Select the symptoms you are experiencing:",
-    options=all_symptoms,
-    key="symptoms"
-)
+# Load data and train model
+df, le = load_data()
+model, questions = train_model(df)
 
-# Number of days slider
-num_days = st.slider("Number of days you've had these symptoms:", 1, 30, 3)
 
-# Prediction button
-predict_button = st.button("Get Diagnosis")
+# -------------------------
+# Session State Initialization
+# -------------------------
+# Initialize all session state variables at the beginning to avoid KeyErrors
+if "answers" not in st.session_state:
+    st.session_state.answers = []
+if "current_q" not in st.session_state:
+    st.session_state.current_q = 0
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "show_input" not in st.session_state:
+    st.session_state.show_input = True
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
 
-if predict_button and selected_symptoms:
-    # Create an input vector for the model
-    input_vector = np.zeros(len(all_symptoms))
-    symptom_to_index = {symptom: i for i, symptom in enumerate(all_symptoms)}
-    
-    for symptom in selected_symptoms:
-        if symptom in symptom_to_index:
-            input_vector[symptom_to_index[symptom]] = 1
-            
-    # Make a prediction
-    prediction_encoded = clf.predict([input_vector])
-    predicted_disease = le.inverse_transform(prediction_encoded)[0]
+# -------------------------
+# Chatbot Logic
+# -------------------------
+def chatbot_response(user_input):
+    if user_input:
+        try:
+            st.session_state.answers.append(int(user_input))
+        except ValueError:
+            st.session_state.chat_history.append(f"**Bot:** ⚠️ Please enter a number between 1 and 7.")
+            return
 
-    # Display the result
-    st.subheader("Diagnosis Result")
-    st.success(f"You may have: **{predicted_disease}**")
+    # Check for prediction
+    if len(st.session_state.answers) == len(questions):
+        st.session_state.show_input = False # Hide input box after prediction
+        user_features = pd.DataFrame([st.session_state.answers], columns=questions)
+        prediction = model.predict(user_features)[0]
+        career = le.inverse_transform([prediction])[0]
+        st.session_state.chat_history.append(f"**Bot:** ✅ Based on your skills, I suggest you explore a career as: **{career}**")
+        return
 
-    # Display description and precautions
-    with st.expander("Details about the disease"):
-        st.markdown(f"**Description:**")
-        if predicted_disease in description_list:
-            st.write(description_list[predicted_disease][0])
-        else:
-            st.write("Description not available.")
-            
-        st.markdown(f"**Precautions to take:**")
-        if predicted_disease in precautionDictionary:
-            precautions = precautionDictionary[predicted_disease]
-            for i, p in enumerate(precautions):
-                if p:
-                    st.write(f"• {p}")
-        else:
-            st.write("Precautions not available.")
-            
-    # Display simplified condition note
-    condition_score = get_symptom_info(selected_symptoms)
-    if condition_score > 13:
-        st.warning("Based on the severity of your symptoms, you should take consultation from a doctor.")
-    else:
-        st.info("It might not be that bad, but you should take precautions.")
+    # Ask next question
+    if st.session_state.current_q < len(questions):
+        bot_msg = f"Rate your skill level in **{questions[st.session_state.current_q]}** (1-7):"
+        st.session_state.current_q += 1
+        st.session_state.chat_history.append(f"**Bot:** {bot_msg}")
 
-elif predict_button and not selected_symptoms:
-    st.warning("Please select at least one symptom.")
+def handle_input():
+    if st.session_state.user_input:
+        user_input = st.session_state.user_input
+        st.session_state.chat_history.append(f"**You:** {user_input}")
+        chatbot_response(user_input)
+        st.session_state.user_input = ""
+
+# -------------------------
+# Display Chat History & Input
+# -------------------------
+for chat in st.session_state.chat_history:
+    st.markdown(chat)
+
+# Start conversation if it's the first run
+if st.session_state.current_q == 0 and not st.session_state.chat_history:
+    st.session_state.chat_history.append(f"**Bot:** Hi! I'll ask you about your skills.")
+    st.session_state.current_q += 1
+    st.session_state.chat_history.append(f"**Bot:** Rate your skill level in **{questions[st.session_state.current_q-1]}** (1-7):")
+
+# Input box section at the bottom
+if st.session_state.show_input:
+    st.text_input("Your answer (1-7):", key="user_input", on_change=handle_input)
