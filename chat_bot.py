@@ -1,112 +1,120 @@
-# chatbot.py (Streamlit Version)
 import streamlit as st
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
+import numpy as np
+import re
+import csv
+import warnings
+from sklearn import preprocessing
+from sklearn.tree import DecisionTreeClassifier, _tree
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.svm import SVC
 
-# -------------------------
-# Streamlit UI Setup
-# -------------------------
-# This MUST be the first Streamlit command.
-st.set_page_config(page_title="Career Guidance Chatbot", layout="centered")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-st.title("💼 Career Guidance Chatbot")
+# ------------------- Load Data -------------------
+training = pd.read_csv("Data/Training.csv")
+testing = pd.read_csv("Data/Testing.csv")
 
-# -------------------------
-# Load & Preprocess Dataset
-# -------------------------
-@st.cache_data
-def load_data():
-    df = pd.read_csv("CareerMap- Mapping Tech Roles With Personality & Skills.csv")
+cols = training.columns[:-1]
+x = training[cols]
+y = training['prognosis']
 
-    # Encode target (career roles)
-    le = LabelEncoder()
-    df["Role"] = le.fit_transform(df["Role"])
+# Label Encoding
+le = preprocessing.LabelEncoder()
+le.fit(y)
+y = le.transform(y)
 
-    # Encode non-numeric features (if any)
-    for col in df.columns:
-        if df[col].dtype == "object" and col != "Role":
-            df[col] = LabelEncoder().fit_transform(df[col])
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.33, random_state=42)
+testx = testing[cols]
+testy = le.transform(testing['prognosis'])
 
-    return df, le
+clf = DecisionTreeClassifier()
+clf.fit(x_train, y_train)
 
-@st.cache_resource
-def train_model(df):
-    X = df.drop("Role", axis=1)
-    y = df["Role"]
+# ------------------- Dictionaries -------------------
+severityDictionary = {}
+description_list = {}
+precautionDictionary = {}
+reduced_data = training.groupby(training['prognosis']).max()
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+def getSeverityDict():
+    with open("MasterData/symptom_severity.csv") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            severityDictionary[row[0]] = int(row[1])
 
-    model = RandomForestClassifier()
-    model.fit(X_train, y_train)
-    return model, list(X.columns)
+def getDescription():
+    with open("MasterData/symptom_Description.csv") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            description_list[row[0]] = row[1]
 
-# Load data and train model
-df, le = load_data()
-model, questions = train_model(df)
+def getprecautionDict():
+    with open("MasterData/symptom_precaution.csv") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            precautionDictionary[row[0]] = [row[1], row[2], row[3], row[4]]
 
+getSeverityDict()
+getDescription()
+getprecautionDict()
 
-# -------------------------
-# Session State Initialization
-# -------------------------
-# Initialize all session state variables at the beginning to avoid KeyErrors
-if "answers" not in st.session_state:
-    st.session_state.answers = []
-if "current_q" not in st.session_state:
-    st.session_state.current_q = 0
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "show_input" not in st.session_state:
-    st.session_state.show_input = True
-if "user_input" not in st.session_state:
-    st.session_state.user_input = ""
+# ------------------- Helper Functions -------------------
+def sec_predict(symptoms_exp):
+    df = pd.read_csv("Data/Training.csv")
+    X = df.iloc[:, :-1]
+    y = df['prognosis']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=20)
+    rf_clf = DecisionTreeClassifier()
+    rf_clf.fit(X_train, y_train)
+    symptoms_dict = {symptom: index for index, symptom in enumerate(X)}
+    input_vector = np.zeros(len(symptoms_dict))
+    for item in symptoms_exp:
+        input_vector[[symptoms_dict[item]]] = 1
+    return rf_clf.predict([input_vector])
 
-# -------------------------
-# Chatbot Logic
-# -------------------------
-def chatbot_response(user_input):
-    if user_input:
-        try:
-            st.session_state.answers.append(int(user_input))
-        except ValueError:
-            st.session_state.chat_history.append(f"**Bot:** ⚠️ Please enter a number between 1 and 7.")
-            return
+def calc_condition(exp, days):
+    total = sum(severityDictionary[item] for item in exp)
+    if (total * days) / (len(exp) + 1) > 13:
+        return "⚠️ You should take consultation from a doctor."
+    else:
+        return "🙂 It might not be that bad, but you should take precautions."
 
-    # Check for prediction
-    if len(st.session_state.answers) == len(questions):
-        st.session_state.show_input = False # Hide input box after prediction
-        user_features = pd.DataFrame([st.session_state.answers], columns=questions)
-        prediction = model.predict(user_features)[0]
-        career = le.inverse_transform([prediction])[0]
-        st.session_state.chat_history.append(f"**Bot:** ✅ Based on your skills, I suggest you explore a career as: **{career}**")
-        return
+# ------------------- Streamlit UI -------------------
+st.title("🩺 Healthcare Chatbot")
+st.write("Predict possible diseases based on your symptoms.")
 
-    # Ask next question
-    if st.session_state.current_q < len(questions):
-        bot_msg = f"Rate your skill level in **{questions[st.session_state.current_q]}** (1-7):"
-        st.session_state.current_q += 1
-        st.session_state.chat_history.append(f"**Bot:** {bot_msg}")
+name = st.text_input("Enter your Name")
+if name:
+    st.success(f"Hello, {name}! Please select your symptoms below.")
 
-def handle_input():
-    if st.session_state.user_input:
-        user_input = st.session_state.user_input
-        st.session_state.chat_history.append(f"**You:** {user_input}")
-        chatbot_response(user_input)
-        st.session_state.user_input = ""
+symptoms_selected = st.multiselect("Select the symptoms you are experiencing:", options=cols)
 
-# -------------------------
-# Display Chat History & Input
-# -------------------------
-for chat in st.session_state.chat_history:
-    st.markdown(chat)
+days = st.number_input("From how many days are you experiencing symptoms?", min_value=1, max_value=30, value=1)
 
-# Start conversation if it's the first run
-if st.session_state.current_q == 0 and not st.session_state.chat_history:
-    st.session_state.chat_history.append(f"**Bot:** Hi! I'll ask you about your skills.")
-    st.session_state.current_q += 1
-    st.session_state.chat_history.append(f"**Bot:** Rate your skill level in **{questions[st.session_state.current_q-1]}** (1-7):")
+if st.button("Predict Disease"):
+    if len(symptoms_selected) == 0:
+        st.warning("⚠️ Please select at least one symptom.")
+    else:
+        second_prediction = sec_predict(symptoms_selected)
+        present_disease = le.inverse_transform(clf.predict([x.loc[0]*0 + [sym in symptoms_selected for sym in cols]]))
 
-# Input box section at the bottom
-if st.session_state.show_input:
-    st.text_input("Your answer (1-7):", key="user_input", on_change=handle_input)
+        # Condition Severity
+        condition_msg = calc_condition(symptoms_selected, days)
+        st.info(condition_msg)
+
+        # Disease Prediction
+        if present_disease[0] == second_prediction[0]:
+            st.subheader(f"✅ You may have: **{present_disease[0]}**")
+            st.write(description_list.get(present_disease[0], "No description available."))
+        else:
+            st.subheader(f"Possible Diseases: **{present_disease[0]}** or **{second_prediction[0]}**")
+            st.write(description_list.get(present_disease[0], ""))
+            st.write(description_list.get(second_prediction[0], ""))
+
+        # Precautions
+        prec = precautionDictionary.get(present_disease[0], [])
+        if prec:
+            st.subheader("🩹 Recommended Precautions:")
+            for i, p in enumerate(prec):
+                st.write(f"{i+1}. {p}")
